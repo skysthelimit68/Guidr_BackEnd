@@ -10,7 +10,7 @@ server.use(helmet());
 server.use(express.json());
 server.use(cors());
 
-server.use('/api', usersRoute)
+server.use('/api/auth', usersRoute)
 
 server.get('/', (req, res) => {
     res.send("It's Working!");
