@@ -10,7 +10,7 @@ module.exports = (req,res,next) => {
                 res.status(401).json({message : 'You have an invalid token!!!'})
             } else {
                 //valid token
-                req.user = { username : decodedToken.username };
+                req.user = { username : decodedToken.username, id : decodedToken.subject };
                 next();
             }
         })

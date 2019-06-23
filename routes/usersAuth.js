@@ -6,8 +6,8 @@ const jwt = require('jsonwebtoken');
 const secrets = require('../config/secrets.js');
 const verifyToken = require('../middlewares/verifyToken.js');
 
-router.post('/register', validateRegistrationData,  (req, res) => {
-    const user = req.user;
+router.post('/register', validateUserData,  (req, res) => {
+    const user = {username : req.body.username, password : req.body.password};
     const hash = bcrypt.hashSync(user.password, 12);
     user.password = hash;
     Users.insert(user)
@@ -37,18 +37,32 @@ router.post('/login', validateLoginCreds, (req, res) => {
         }
     })
     .catch( error => {
-        res.status(500).json({messate: "Error Logging In", error: error.toString()})
+        res.status(500).json({message: "Error Logging In", error: error.toString() })
     })
 })
 
-/* 
-//for testing middleware only
-router.get('/:id', validateId, verifyToken, (req, res) => {
-    res.status(200).json({id: req.body.user.id, username: req.body.user.username})
+//updating profile, not including password
+router.put('/:id/update', validateId, verifyToken, validateUpdateData,  (req, res) => {
+    const changes = req.body
+    Users.update(req.params.id, changes)
+        .then( user => {
+            if(user) {
+                const token = generateToken(user) //generating new token in case username was changed 
+                user.password = undefined;
+                user.token = token
+                res.status(200).json(user)
+            } else {
+                res.status(404).json({message: "User does not exist"})
+            }
+        })
+        .catch( error => {
+            res.status(500).json({message: "Error updating user", error: error.toString() })
+        })
+    
 })
-*/
 
-//generate json webtoken after successful login
+
+//generate json webtoken after successful login / registration / update
 function generateToken(user) {
     const payload = {
         subject: user.id,
@@ -60,6 +74,7 @@ function generateToken(user) {
     return jwt.sign(payload, secrets.jwtSecret, options)
 }
 
+
 //middlewares
 
 function validateId(req, res, next) {
@@ -67,7 +82,6 @@ function validateId(req, res, next) {
         Users.get(req.params.id) 
         .then( user => {
             if(user) {
-                req.body.user = user
                 next();
             } else {
                 res.status(404).json({message: "user not found"})
@@ -79,6 +93,7 @@ function validateId(req, res, next) {
 }
 
 function validateLoginCreds(req, res, next) {
+    //if all login creds exist
     if(req.body && req.body.username && req.body.password) {
         next();
     } else {
@@ -86,25 +101,53 @@ function validateLoginCreds(req, res, next) {
     }
 }
 
-function validateRegistrationData(req, res, next) {
-    if(req.body && req.body.username && req.body.password) {
-        req.user = {username: req.body.username, password: req.body.password}
-        next();
-    } else {
-        res.status(400).json({message: "Require username and password for registration"})
-    }
+function validateUserData(req, res, next) {
+    //check if all inputs exist
+
+        if(req.body && req.body.username && req.body.password) {
+            const username = req.body.username
+            //check if username in use
+            Users.getBy({ username })
+            .then( user => {
+                if((user.length > 0)) {
+                    res.status(405).json({message: "username already in use"})
+                } else {
+                    //req.user = {username: req.body.username, password: req.body.password}
+                    next();
+                }
+            })
+            .catch( error => {
+                res.status(500).json({messate: "Error validating inputs", error: error.toString()})
+            })
+        } else {
+            res.status(400).json({message: "Require username and password for registration"})
+        }
+    
 }
 
-
-
-
-
-
-
-
-
-
-
-
+//this function is to check the new username is not already in use by another user
+function validateUpdateData(req, res, next) {
+    if(req.user.id == req.params.id) { // permission
+    //only need to perform the following if user wish to change username --> checking for username duplication
+        if(req.body.username && req.body.username !== req.user.username) {
+            const username = req.body.username
+            Users.getBy({username})
+            .then( user => {
+                if((user.length > 0)) {
+                    res.status(405).json({message: "username already in use"})
+                } else {
+                    next();
+                }
+            })
+            .catch( error => {
+                res.status(500).json({messate: "Error validating update inputs", error: error.toString()})
+            })
+        } else {
+            next();
+        }
+    } else {
+            res.status(400).json({message : "You have no permission to update this profile"})
+        }
+}
 
 module.exports = router;
