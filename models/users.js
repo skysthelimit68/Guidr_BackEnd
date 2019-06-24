@@ -5,7 +5,8 @@ module.exports = {
     getBy,
     insert,
     remove,
-    update
+    update,
+    getUserTrips
 }
 
 function get(id){
@@ -41,3 +42,22 @@ function update(id, changes) {
     .update(changes)
     .then(updatedUser => updatedUser ? get(id) : null);
 }
+
+async function getUserTrips(id) {
+    const user_id = id
+    const trips =  await db('trips')
+    .select(['title', 'shortDescription', 'image'])
+    .where({ user_id })
+    const sumResult = await getTotalDuration(id)
+    const sumDuration = Array.from(sumResult)[0]
+    return {sumDuration,trips}
+}
+
+function getTotalDuration(id) {
+    const user_id = id
+    return db('trips')
+    .sum({"sum":'duration'})
+    .groupBy('user_id')
+    .where({user_id})
+}
+

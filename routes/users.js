@@ -1,79 +1,17 @@
 const router = require('express').Router();
 
-const bcrypt = require('bcryptjs');
 const Users = require('../models/users.js');
-const jwt = require('jsonwebtoken');
-const secrets = require('../config/secrets.js');
 const verifyToken = require('../middlewares/verifyToken.js');
 
-router.post('/register', validateUserData,  (req, res) => {
-    const user = {username : req.body.username, password : req.body.password};
-    const hash = bcrypt.hashSync(user.password, 12);
-    user.password = hash;
-    Users.insert(user)
-        .then( user => {
-            const token = generateToken(user);
-            user.token = token;
-            user.password = undefined
-            res.status(201).json(user);
-        })
-        .catch(error => {
-            res.status(500).json({messate: "Error registering", error: error.toString()})
-        })
-})
-
-router.post('/login', validateLoginCreds, (req, res) => {
-    const { username, password } = req.body;
-    Users.getBy({ username })
-    .first()
-    .then( user => {
-        if(user && bcrypt.compareSync(password, user.password)) {
-            const token = generateToken(user);
-            user.token = token
-            user.password = undefined;
-            res.status(200).json(user);
-        } else {
-            res.status(401).json({message: "Invalid Credential."})
-        }
+router.get('/:id/trips', verifyToken, validateId, restricted, (req, res) => {
+    Users.getUserTrips(req.params.id)
+    .then( response => {
+        res.status(200).json(response)
     })
     .catch( error => {
-        res.status(500).json({message: "Error Logging In", error: error.toString() })
+        res.status(500).json({messate: "Error registering", error: error.toString()})
     })
 })
-
-//updating profile, not including password
-router.put('/:id/update', validateId, verifyToken, validateUpdateData,  (req, res) => {
-    const changes = req.body
-    Users.update(req.params.id, changes)
-        .then( user => {
-            if(user) {
-                const token = generateToken(user) //generating new token in case username was changed 
-                user.password = undefined;
-                user.token = token
-                res.status(200).json(user)
-            } else {
-                res.status(404).json({message: "User does not exist"})
-            }
-        })
-        .catch( error => {
-            res.status(500).json({message: "Error updating user", error: error.toString() })
-        })
-    
-})
-
-
-//generate json webtoken after successful login / registration / update
-function generateToken(user) {
-    const payload = {
-        subject: user.id,
-        username: user.username
-    } 
-    const options = {
-        expiresIn: '1d'
-    }
-    return jwt.sign(payload, secrets.jwtSecret, options)
-}
-
 
 //middlewares
 
@@ -92,6 +30,14 @@ function validateId(req, res, next) {
     }
 }
 
+function restricted(req, res, next) {
+    if(req.params.id == req.user.id) next();
+    else {
+        res.status(403).json({message: "You have no permission to view these trips"})
+    }
+}
+
+/*
 function validateLoginCreds(req, res, next) {
     //if all login creds exist
     if(req.body && req.body.username && req.body.password) {
@@ -148,5 +94,5 @@ function validateUpdateData(req, res, next) {
             res.status(403).json({message : "You have no permission to update this profile"})
         }
 }
-
+*/
 module.exports = router;
